@@ -1,0 +1,23 @@
+# Maven build output
+target/
+
+# Large AI model files (downloaded at build time from Google Drive)
+Flask_API/models/*.joblib
+Flask_API/models/*.csv
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Android build
+smarttrip-android/app/build/
+smarttrip-android/.gradle/
+smarttrip-android/local.properties
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
