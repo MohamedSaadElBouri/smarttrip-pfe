@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+models/*.joblib
+models/*.csv
+!models/.gitkeep
+
+# Java / Spring Boot
+src/main/resources/application.properties
