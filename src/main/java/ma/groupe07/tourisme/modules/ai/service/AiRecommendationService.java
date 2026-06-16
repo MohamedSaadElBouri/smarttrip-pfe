@@ -325,13 +325,13 @@ public class AiRecommendationService {
         Map<String, Long> cityCounts = new HashMap<>();
         List<Double> allScores = new ArrayList<>();
 
-        // 1. Publications "likees"
+        // 1. Publications "likees" — score fixe 75 : le fait d'avoir like = signal fort,
+        //    independamment de la popularite du post (sinon score quasi nul sur DB fraiche).
         for (LikePublication like : likePublicationRepository.findByUtilisateurIdWithPublication(userId)) {
             Publication pub = like.getPublication();
             if (pub == null) continue;
-            double score = Math.min(100.0, (pub.getNbLikes() != null ? pub.getNbLikes() : 0) * 1.5);
             addSignal(scoresByCategory, cityCounts, allScores, pub.getCategorie(),
-                    CITY_NORMALIZATION.get(pub.getRegion()), score);
+                    CITY_NORMALIZATION.get(pub.getRegion()), 75.0);
         }
 
         // 2. Publications sauvegardees (signal d'interet fort)
