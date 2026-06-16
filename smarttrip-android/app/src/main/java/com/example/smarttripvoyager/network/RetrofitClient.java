@@ -10,9 +10,7 @@ import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
 public class RetrofitClient {
-    // Public ngrok URL — works on any network, no USB or Wi-Fi constraint.
-    // If the tunnel domain changes, update this line and rebuild the APK.
-    private static final String BASE_URL = "https://thirteen-flight-unheated.ngrok-free.dev/api/v1/";
+    private static final String BASE_URL = "https://smarttrip-pfe-production.up.railway.app/api/v1/";
     private static Retrofit retrofit = null;
 
     public static Retrofit getClient(Context context) {

@@ -262,45 +262,115 @@ public class AiRecommendationService {
 
     /**
      * Derive le type d'experience a recommander en priorite depuis les reponses
-     * explicites du questionnaire (style de voyage + coches d'interet), plutot
-     * que depuis le modele Flask qui se base sur l'engagement passe et peut
-     * retourner "food_tour" meme quand l'utilisateur n'a pas coche gastronomie.
-     * Le modele Flask est conserve comme repli de dernier recours.
+     * explicites du questionnaire (style de voyage + coches d'interet).
+     * En cas d'ambiguite (pas de coches), utilise l'engagement reel de l'utilisateur
+     * comme signal de differenciation pour eviter de toujours retourner "cultural_immersion".
      */
     private String deriveExperienceFromQuestionnaire(TouristProfileRequest profile, String flaskFallback) {
         String style = profile.getTravelStyle() != null ? profile.getTravelStyle().toLowerCase().trim() : "";
 
-        // Priority 1: travel style (most explicit user choice in questionnaire)
+        // Priority 1: travel style + interest chips (most explicit user choices)
         switch (style) {
             case "spiritual":
-                return profile.getInterestHistory() == 1 ? "historical_exploration" : "cultural_immersion";
+                // Spiritual travel in Morocco is strongly tied to history (medersa, mosques, Volubilis).
+                // Default to historical_exploration, not cultural_immersion, to produce a distinct result.
+                if (profile.getInterestHistory() == 1)  return "historical_exploration";
+                if (profile.getInterestWellness() == 1) return "wellness_spa";
+                return "historical_exploration";
+
             case "adventure":
                 if (profile.getInterestAdventure() == 1) return "adventure_sport";
                 return profile.getInterestNature() == 1 ? "nature_escape" : "adventure_sport";
+
             case "relaxation":
-                return profile.getInterestNature() == 1 ? "nature_escape" : "wellness_spa";
+                if (profile.getInterestNature() == 1)   return "nature_escape";
+                if (profile.getInterestWellness() == 1) return "wellness_spa";
+                return "wellness_spa";
+
             case "foodie":
                 return "food_tour";
+
             case "photography":
-                return "photography_tour";
+                return profile.getInterestNature() == 1 ? "photography_tour" : "photography_tour";
+
             case "cultural":
-                if (profile.getInterestHistory() == 1) return "historical_exploration";
-                if (profile.getInterestNature() == 1)  return "nature_escape";
-                return "cultural_immersion";
+                if (profile.getInterestHistory() == 1)     return "historical_exploration";
+                if (profile.getInterestNature() == 1)      return "nature_escape";
+                if (profile.getInterestFood() == 1)        return "food_tour";
+                if (profile.getInterestAdventure() == 1)   return "adventure_sport";
+                if (profile.getInterestWellness() == 1)    return "wellness_spa";
+                if (profile.getInterestPhotography() == 1) return "photography_tour";
+                if (profile.getInterestFestivals() == 1)   return "festival_event";
+                // No chips: use engagement to disambiguate, then fall through to historical
+                String cultEng = engagementToExperience(profile);
+                return cultEng != null ? cultEng : "historical_exploration";
         }
 
-        // Priority 2: interest chips (non-food first to break the food-engagement loop)
-        if (profile.getInterestHistory() == 1)     return "historical_exploration";
-        if (profile.getInterestNature() == 1)      return "nature_escape";
+        // Priority 2: interest chips only (no style matched above)
         if (profile.getInterestAdventure() == 1)   return "adventure_sport";
+        if (profile.getInterestNature() == 1)      return "nature_escape";
+        if (profile.getInterestHistory() == 1)     return "historical_exploration";
+        if (profile.getInterestFood() == 1)        return "food_tour";
         if (profile.getInterestWellness() == 1)    return "wellness_spa";
         if (profile.getInterestFestivals() == 1)   return "festival_event";
         if (profile.getInterestPhotography() == 1) return "photography_tour";
         if (profile.getInterestShopping() == 1)    return "cultural_immersion";
-        if (profile.getInterestFood() == 1)        return "food_tour";
 
-        // Priority 3: Flask model (may reflect engagement bias — used only as last resort)
-        return flaskFallback != null && !flaskFallback.isBlank() ? flaskFallback : "cultural_immersion";
+        // Priority 3: real engagement history (already computed by applyUserReactions)
+        String engBased = engagementToExperience(profile);
+        if (engBased != null) return engBased;
+
+        // Priority 4: Flask model, then final fallback to historical (more specific than cultural_immersion)
+        return flaskFallback != null && !flaskFallback.isBlank() ? flaskFallback : "historical_exploration";
+    }
+
+    /**
+     * Derive un type d'experience depuis la categorie la plus engagee de l'utilisateur.
+     * Appele apres applyUserReactions() — topEngagedCategory est deja calcule.
+     * Retourne null si aucun signal d'engagement n'est disponible.
+     */
+    private String engagementToExperience(TouristProfileRequest profile) {
+        String top = profile.getTopEngagedCategory();
+        if (top == null || top.isBlank()) return null;
+        switch (top.toLowerCase()) {
+            case "food":      return "food_tour";
+            case "nature":    return "nature_escape";
+            case "adventure": return "adventure_sport";
+            case "wellness":  return "wellness_spa";
+            case "history":   return "historical_exploration";
+            case "culture":   return "cultural_immersion";
+            default:          return null;
+        }
+    }
+
+    /**
+     * Normalise le theme d'un circuit depuis la valeur brute stockee en DB.
+     * Gere les valeurs multi-themes (ex: "CULTURE,HISTOIRE") en prenant le premier,
+     * et les variantes d'ecriture (majuscules, accents) pour les faire correspondre
+     * aux cles utilisees dans les tables de scoring (STYLE_THEMES, EXPERIENCE_THEMES...).
+     */
+    private String normalizeTheme(String raw) {
+        if (raw == null || raw.isBlank()) return raw;
+        String first = raw.split(",")[0].trim();
+        if (first.isEmpty()) return raw;
+        switch (first.toUpperCase()) {
+            case "CULTURE":      return "Culture";
+            case "HISTOIRE":
+            case "PATRIMOINE":   return "Histoire";
+            case "NATURE":       return "Nature";
+            case "GASTRONOMIE":  return "Gastronomie";
+            case "AVENTURE":     return "Aventure";
+            case "BIEN-ÊTRE":
+            case "BIEN-ETRE":    return "Bien-être";
+            case "DETENTE":
+            case "DÉTENTE":      return "Détente";
+            case "ARTISANAT":    return "Artisanat";
+            case "PHOTOGRAPHIE": return "Photographie";
+            case "FESTIVALS":    return "Festivals";
+            default:
+                // Title-case first word as fallback
+                return Character.toUpperCase(first.charAt(0)) + first.substring(1).toLowerCase();
+        }
     }
 
     /**
@@ -403,7 +473,7 @@ public class AiRecommendationService {
             Circuit circuit = adhesion.getCircuit();
             if (circuit == null) continue;
             addSignal(scoresByCategory, cityCounts, allScores,
-                    CIRCUIT_THEME_TO_ENGAGEMENT.get(circuit.getTheme()),
+                    CIRCUIT_THEME_TO_ENGAGEMENT.get(normalizeTheme(circuit.getTheme())),
                     CITY_NORMALIZATION.get(circuit.getVille()), 85.0);
         }
 
@@ -421,7 +491,7 @@ public class AiRecommendationService {
             Circuit circuit = circuitRepository.findById(signal.getEntiteId()).orElse(null);
             if (circuit == null) continue;
             addSignal(scoresByCategory, cityCounts, allScores,
-                    CIRCUIT_THEME_TO_ENGAGEMENT.get(circuit.getTheme()),
+                    CIRCUIT_THEME_TO_ENGAGEMENT.get(normalizeTheme(circuit.getTheme())),
                     CITY_NORMALIZATION.get(circuit.getVille()), 45.0);
         }
 
@@ -478,7 +548,7 @@ public class AiRecommendationService {
 
     /** Construit les 21 colonnes attendues par feature_columns['trips'] a partir d'un Circuit. */
     private Map<String, Object> toCandidateTrip(Circuit circuit) {
-        String theme = circuit.getTheme();
+        String theme = normalizeTheme(circuit.getTheme());
         Integer days = circuit.getDureeJours() != null ? circuit.getDureeJours() : 1;
         Double prix = circuit.getPrixEstime() != null ? circuit.getPrixEstime() : 0.0;
 
@@ -545,10 +615,10 @@ public class AiRecommendationService {
 
             double normalizedAi = Math.max(0, Math.min(1, toDouble(trip.get("ai_match_score")) / 5.0));
 
-            double style = circuit != null ? styleScore(profile.getTravelStyle(), circuit.getTheme()) : 0.5;
+            double style = circuit != null ? styleScore(profile.getTravelStyle(), normalizeTheme(circuit.getTheme())) : 0.5;
             double budget = circuit != null ? budgetScore(profile.getBudgetLevel(), circuit.getPrixEstime()) : 0.5;
             double duration = circuit != null ? durationScore(profile.getTripDurationDays(), circuit.getDureeJours()) : 0.5;
-            double interest = circuit != null ? interestScore(profile, circuit.getTheme()) : 0.5;
+            double interest = circuit != null ? interestScore(profile, normalizeTheme(circuit.getTheme())) : 0.5;
             double engagement = engagementScore(profile, circuit);
             double cityMatch = cityMatchScore(recommendedCity, circuit);
             double experienceMatch = experienceMatchScore(recommendedExperience, circuit);
@@ -601,7 +671,7 @@ public class AiRecommendationService {
         for (Map<String, Object> trip : ranked) {
             Long id = toLong(trip.get("trip_id"));
             Circuit c = circuitsById.get(id);
-            String theme = (c != null && c.getTheme() != null) ? c.getTheme() : "_";
+            String theme = (c != null && c.getTheme() != null) ? normalizeTheme(c.getTheme()) : "_";
             int cnt = themeCount.getOrDefault(theme, 0);
             if (cnt < MAX_SAME_THEME) {
                 primary.add(trip);
@@ -630,7 +700,7 @@ public class AiRecommendationService {
      */
     private double engagementScore(TouristProfileRequest profile, Circuit circuit) {
         if (circuit == null || profile.getTotalPostsEngaged() == 0) return 0.5;
-        String dimension = CIRCUIT_THEME_TO_ENGAGEMENT.get(circuit.getTheme());
+        String dimension = CIRCUIT_THEME_TO_ENGAGEMENT.get(normalizeTheme(circuit.getTheme()));
         if (dimension == null) return 0.5;
         double value = switch (dimension) {
             case "food" -> profile.getEngagementFood();
@@ -667,7 +737,7 @@ public class AiRecommendationService {
         if (circuit == null || recommendedExperience == null) return 0.3;
         Set<String> themes = EXPERIENCE_THEMES.get(recommendedExperience);
         if (themes == null) return 0.5;
-        return themes.contains(circuit.getTheme()) ? 1.0 : 0.3;
+        return themes.contains(normalizeTheme(circuit.getTheme())) ? 1.0 : 0.3;
     }
 
     /**
@@ -695,7 +765,7 @@ public class AiRecommendationService {
             reasons.add("correspond à votre style de voyage \"" + label + "\"");
         }
 
-        String circuitEngagement = CIRCUIT_THEME_TO_ENGAGEMENT.get(circuit.getTheme());
+        String circuitEngagement = CIRCUIT_THEME_TO_ENGAGEMENT.get(normalizeTheme(circuit.getTheme()));
         if (interest >= 0.75 && circuitEngagement != null) {
             String label = ENGAGEMENT_LABEL_FR.getOrDefault(circuitEngagement, circuitEngagement);
             if (!matched.contains(label)) matched.add(label);
