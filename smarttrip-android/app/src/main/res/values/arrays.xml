@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Libelles affiches dans le selecteur de categorie d'une publication -->
+    <string-array name="publication_categories_labels">
+        <item>Culture</item>
+        <item>Nature</item>
+        <item>Gastronomie</item>
+        <item>Aventure</item>
+        <item>Histoire</item>
+        <item>Bien-être</item>
+        <item>Shopping</item>
+        <item>Festivals</item>
+        <item>Restaurants</item>
+        <item>Monuments</item>
+    </string-array>
+
+    <!-- Valeurs envoyees au backend -->
+    <string-array name="publication_categories_values">
+        <item>culture</item>
+        <item>nature</item>
+        <item>food</item>
+        <item>adventure</item>
+        <item>history</item>
+        <item>wellness</item>
+        <item>shopping</item>
+        <item>festivals</item>
+        <item>restaurants</item>
+        <item>monuments</item>
+    </string-array>
+
+    <!-- Villes de la region Fes-Meknes -->
+    <string-array name="cities_fes_meknes">
+        <item>Fès</item>
+        <item>Meknès</item>
+        <item>Ifrane</item>
+        <item>Azrou</item>
+        <item>Moulay Idriss</item>
+        <item>Volubilis</item>
+        <item>Khénifra</item>
+        <item>Sefrou</item>
+        <item>Bhalil</item>
+        <item>Imouzzer Kandar</item>
+    </string-array>
+</resources>

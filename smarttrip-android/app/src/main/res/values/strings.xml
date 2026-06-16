@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">SmartTripVoyager</string>
+    <string-array name="budget_levels">
+        <item>low_budget</item>
+        <item>mid_range</item>
+        <item>luxury</item>
+    </string-array>
+
+    <string-array name="food_preferences">
+        <item>local_moroccan</item>
+        <item>international</item>
+        <item>vegetarian</item>
+        <item>street_food</item>
+    </string-array>
+
+    <string-array name="accommodation_types">
+        <item>riad</item>
+        <item>hotel</item>
+        <item>hostel</item>
+        <item>apartment</item>
+    </string-array>
+</resources>
