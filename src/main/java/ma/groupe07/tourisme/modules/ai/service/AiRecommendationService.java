@@ -175,50 +175,89 @@ public class AiRecommendationService {
      * (avec les circuits publies de la DB comme candidate_trips), puis reclassement
      * cote Java en fonction du profil du questionnaire pour garantir des resultats
      * varies selon les reponses (style, budget, duree, centres d'interet).
+     * Chaque appel Flask est enveloppe dans son propre try-catch : si Flask est
+     * indisponible, la logique Java prend le relais et le classement reste sensible
+     * aux reponses du questionnaire.
      * Format de retour aligne sur RecommendationResponse cote Android
      * (recommended_city, recommended_experience, top_trips).
      */
     @Transactional
     public Map<String, Object> getFullRecommendation(TouristProfileRequest profile, Long userId) {
+        applyUserReactions(profile, userId);
+
+        // Chaque appel Flask est isole : une defaillance ne bloque pas les suivants.
+        String city = "Fes";
         try {
-            applyUserReactions(profile, userId);
-
-            String city = recommendCity(profile);
-            String flaskExperience = recommendExperience(profile);
-            // Derive experience from questionnaire answers (not from engagement-biased Flask model)
-            String experience = deriveExperienceFromQuestionnaire(profile, flaskExperience);
-
-            List<Circuit> candidates = circuitRepository.findByStatut("PUBLIE");
-            profile.setCandidateTrips(buildCandidateTrips(candidates));
-            List<Map<String, Object>> trips = recommendTrips(profile);
-            List<Map<String, Object>> topTrips = rerankByProfile(trips, candidates, profile, city, experience);
-
-            List<Long> topIds = topTrips.stream()
-                    .map(t -> toLong(t.get("trip_id"))).collect(Collectors.toList());
-            List<String> topThemes = topTrips.stream()
-                    .map(t -> { Long id = toLong(t.get("trip_id"));
-                                Circuit c = candidates.stream().filter(x -> x.getId().equals(id)).findFirst().orElse(null);
-                                return c != null ? c.getTheme() : "?"; })
-                    .collect(Collectors.toList());
-            log.info("AI Reco userId={} style={} budget={} interests={}|{}|{}|{}|{}|{}|{}|{} flaskExp={} derivedExp={} topTrips={} themes={}",
-                    userId, profile.getTravelStyle(), profile.getBudgetLevel(),
-                    profile.getInterestHistory(), profile.getInterestNature(), profile.getInterestFood(),
-                    profile.getInterestAdventure(), profile.getInterestPhotography(), profile.getInterestWellness(),
-                    profile.getInterestShopping(), profile.getInterestFestivals(),
-                    flaskExperience, experience, topIds, topThemes);
-
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("recommended_city", city);
-            // Return French label so the UI displays a meaningful string (not raw English key)
-            result.put("recommended_experience", EXPERIENCE_LABEL_FR.getOrDefault(experience, experience));
-            result.put("top_trips", topTrips);
-
-            persistRecommendation(profile, userId, topTrips);
-            return result;
+            String flaskCity = recommendCity(profile);
+            if (flaskCity != null && !flaskCity.isBlank()) city = flaskCity;
         } catch (Exception e) {
-            log.error("Erreur lors de l'appel a l'API IA Flask, retour des circuits par defaut", e);
-            return fallbackRecommendation();
+            log.warn("Flask recommend-city indisponible, ville par defaut: Fes");
         }
+
+        String flaskExperience = null;
+        try {
+            flaskExperience = recommendExperience(profile);
+        } catch (Exception e) {
+            log.warn("Flask recommend-experience indisponible");
+        }
+
+        // Derive experience from questionnaire answers (not from engagement-biased Flask model)
+        String experience = deriveExperienceFromQuestionnaire(profile, flaskExperience);
+
+        List<Circuit> candidates = circuitRepository.findByStatut("PUBLIE");
+        profile.setCandidateTrips(buildCandidateTrips(candidates));
+
+        List<Map<String, Object>> trips;
+        try {
+            trips = recommendTrips(profile);
+        } catch (Exception e) {
+            log.warn("Flask recommend-trips indisponible, classement Java uniquement sur {} circuits", candidates.size());
+            trips = buildJavaOnlyTrips(candidates);
+        }
+
+        List<Map<String, Object>> topTrips = rerankByProfile(trips, candidates, profile, city, experience);
+
+        List<Long> topIds = topTrips.stream()
+                .map(t -> toLong(t.get("trip_id"))).collect(Collectors.toList());
+        List<String> topThemes = topTrips.stream()
+                .map(t -> { Long id = toLong(t.get("trip_id"));
+                            Circuit c = candidates.stream().filter(x -> x.getId().equals(id)).findFirst().orElse(null);
+                            return c != null ? c.getTheme() : "?"; })
+                .collect(Collectors.toList());
+        log.info("AI Reco userId={} style={} budget={} interests={}|{}|{}|{}|{}|{}|{}|{} flaskExp={} derivedExp={} topTrips={} themes={}",
+                userId, profile.getTravelStyle(), profile.getBudgetLevel(),
+                profile.getInterestHistory(), profile.getInterestNature(), profile.getInterestFood(),
+                profile.getInterestAdventure(), profile.getInterestPhotography(), profile.getInterestWellness(),
+                profile.getInterestShopping(), profile.getInterestFestivals(),
+                flaskExperience, experience, topIds, topThemes);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("recommended_city", city);
+        // Return French label so the UI displays a meaningful string (not raw English key)
+        result.put("recommended_experience", EXPERIENCE_LABEL_FR.getOrDefault(experience, experience));
+        result.put("top_trips", topTrips);
+
+        persistRecommendation(profile, userId, topTrips);
+        return result;
+    }
+
+    /**
+     * Construit une liste de "trips" initiaux sans score Flask : chaque circuit
+     * recoit un score de base egal a sa note moyenne (ou 3.0 par defaut).
+     * Utilise quand Flask est indisponible : rerankByProfile() applique ensuite
+     * le classement base sur le profil du questionnaire, garantissant que des
+     * reponses differentes produisent des top 5 differents meme sans IA Flask.
+     */
+    private List<Map<String, Object>> buildJavaOnlyTrips(List<Circuit> candidates) {
+        return candidates.stream()
+                .map(c -> {
+                    Map<String, Object> trip = new LinkedHashMap<>();
+                    trip.put("trip_id", c.getId());
+                    trip.put("trip_name", c.getTitre());
+                    trip.put("ai_match_score", c.getNoteMoyenne() != null ? c.getNoteMoyenne() : 3.0);
+                    return trip;
+                })
+                .collect(Collectors.toList());
     }
 
     /**

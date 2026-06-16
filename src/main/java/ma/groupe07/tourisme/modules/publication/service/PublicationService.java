@@ -53,29 +53,38 @@ public class PublicationService {
 
         try {
             Utilisateur viewer = viewerId != null ? userRepo.findById(viewerId).orElse(null) : null;
-            // Score d'engagement recent (likes/sauvegardes/commentaires/vues) par categorie,
-            // recalcule a chaque appel : permet au classement du feed de reagir immediatement
-            // aux nouvelles reactions de l'utilisateur, et pas seulement a ses preferences figees.
+            // Score d'engagement recent (likes/sauvegardes/commentaires/vues) par categorie.
+            // Ce calcul utilise uniquement la DB, pas Flask : il fonctionne meme si Flask est DOWN.
             Map<String, Double> engagementByCategory = aiRecommendationService.getCategoryEngagementScores(viewerId);
 
             List<FeedPostRequest> feedRequests = content.stream()
                     .map(p -> toFeedPostRequest(p, viewer, engagementByCategory))
                     .collect(Collectors.toList());
 
-            Map<Long, Double> scores = aiRecommendationService.rankFeed(feedRequests).stream()
-                    .collect(Collectors.toMap(
-                            m -> ((Number) m.get("publication_id")).longValue(),
-                            m -> ((Number) m.get("ai_ranking_score")).doubleValue(),
-                            (a, b) -> a));
+            // Appel Flask isole : si Flask est indisponible, score neutre (1.0) pour tous les posts.
+            // Le boost d'engagement (calcule depuis la DB) s'applique dans tous les cas.
+            Map<Long, Double> scores;
+            try {
+                scores = aiRecommendationService.rankFeed(feedRequests).stream()
+                        .collect(Collectors.toMap(
+                                m -> ((Number) m.get("publication_id")).longValue(),
+                                m -> ((Number) m.get("ai_ranking_score")).doubleValue(),
+                                (a, b) -> a));
+            } catch (Exception flaskEx) {
+                log.warn("Flask rank-feed indisponible, boost d'engagement applique sans score IA");
+                scores = content.stream().collect(Collectors.toMap(Publication::getId, p -> 1.0));
+            }
 
-            dtos.forEach(dto -> dto.setAiRankingScore(scores.get(dto.getId())));
+            final Map<Long, Double> finalScores = scores;
+            dtos.forEach(dto -> dto.setAiRankingScore(finalScores.getOrDefault(dto.getId(), 1.0)));
 
-            // Amplify engagement signal: multiply Flask score by a category engagement boost
-            // (1.0 to 1.5x) so that changes in user interactions produce a visible reordering.
+            // Amplify engagement signal: multiply score by a category engagement boost
+            // (1.0 to 1.5x) so that changes in user interactions produce a visible reordering
+            // even when Flask is unavailable.
             if (!engagementByCategory.isEmpty()) {
                 double maxEng = engagementByCategory.values().stream().mapToDouble(v -> v).max().orElse(1.0);
                 Map<Long, String> pubCategories = content.stream()
-                        .collect(Collectors.toMap(p -> p.getId(),
+                        .collect(Collectors.toMap(Publication::getId,
                                  p -> p.getCategorie() != null ? p.getCategorie() : ""));
                 dtos.forEach(dto -> {
                     String cat = pubCategories.getOrDefault(dto.getId(), "");
@@ -91,11 +100,11 @@ public class PublicationService {
                     (PublicationDTO d) -> d.getAiRankingScore() != null ? d.getAiRankingScore() : -1.0)
                     .reversed());
 
-            log.info("Feed IA recalcule pour viewerId={} : engagement={}, top3={}",
+            log.info("Feed recalcule pour viewerId={} : engagement={}, top3={}",
                     viewerId, engagementByCategory,
                     dtos.stream().limit(3).map(d -> d.getId() + "(" + d.getCategorie() + ")").collect(Collectors.toList()));
         } catch (Exception e) {
-            log.warn("Feed Rank IA indisponible, conservation de l'ordre chronologique", e);
+            log.warn("Erreur classement feed, conservation de l'ordre chronologique", e);
         }
 
         return new PageImpl<>(dtos, pageable, pubs.getTotalElements());
