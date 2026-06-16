@@ -565,8 +565,11 @@ public class AiRecommendationService {
 
             trip.put("ai_match_score", finalScore);
             trip.put("profile_match_score", profileScore);
-            if (circuit != null && circuit.getDescription() != null) {
-                trip.put("trip_description", circuit.getDescription());
+            if (circuit != null) {
+                trip.put("trip_title", circuit.getTitre() != null ? circuit.getTitre() : "Circuit personnalisé");
+                trip.put("trip_description", circuit.getDescription() != null ? circuit.getDescription() : circuit.getTheme());
+                trip.put("duration_days", circuit.getDureeJours());
+                trip.put("estimated_budget", circuit.getPrixEstime());
             }
             addReasonAndCategories(trip, profile, circuit, style, budget, duration, interest,
                     engagement, cityMatch, experienceMatch, recommendedCity, recommendedExperience);

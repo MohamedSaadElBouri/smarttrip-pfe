@@ -37,6 +37,9 @@ public interface ApiService {
     @retrofit2.http.GET("publications/me")
     Call<com.example.smarttripvoyager.data.model.ApiResponse<com.example.smarttripvoyager.data.model.Page<com.example.smarttripvoyager.data.model.Publication>>> getMyPosts();
 
+    @retrofit2.http.GET("publications/me/saved")
+    Call<com.example.smarttripvoyager.data.model.ApiResponse<java.util.List<com.example.smarttripvoyager.data.model.Publication>>> getSavedPublications();
+
     @retrofit2.http.PUT("utilisateurs/{id}/preferences")
     Call<Void> updatePreferences(@retrofit2.http.Path("id") Long id, @Body com.example.smarttripvoyager.data.model.UpdatePreferencesRequest request);
 

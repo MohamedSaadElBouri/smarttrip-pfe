@@ -79,14 +79,27 @@ public class GeneratedTripsActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(@NonNull TripViewHolder holder, int position) {
             Map<String, Object> trip = trips.get(position);
-            holder.tvTitle.setText(String.valueOf(trip.get("trip_title")));
-            holder.tvDesc.setText(String.valueOf(trip.get("trip_description")));
-            
+            Object titleObj = trip.get("trip_title");
+            if (titleObj == null || "null".equals(String.valueOf(titleObj))) titleObj = trip.get("trip_name");
+            holder.tvTitle.setText(titleObj != null && !"null".equals(String.valueOf(titleObj))
+                    ? String.valueOf(titleObj) : "Circuit personnalisé");
+
+            Object descObj = trip.get("trip_description");
+            holder.tvDesc.setText(descObj != null && !"null".equals(String.valueOf(descObj))
+                    ? String.valueOf(descObj) : "");
+
             Object duration = trip.get("duration_days");
-            holder.tvDuration.setText(duration + " Jours");
+            if (duration instanceof Double) duration = ((Double) duration).intValue();
+            holder.tvDuration.setText(duration != null && !"null".equals(String.valueOf(duration))
+                    ? duration + " Jours" : "— Jours");
 
             Object budget = trip.get("estimated_budget");
-            holder.tvBudget.setText(budget + " MAD");
+            if (budget instanceof Double && ((Double) budget) == Math.floor((Double) budget)) {
+                holder.tvBudget.setText(((Double) budget).intValue() + " MAD");
+            } else {
+                holder.tvBudget.setText(budget != null && !"null".equals(String.valueOf(budget))
+                        ? budget + " MAD" : "— MAD");
+            }
 
             Object reason = trip.get("reason");
             if (reason != null && !String.valueOf(reason).isBlank()) {

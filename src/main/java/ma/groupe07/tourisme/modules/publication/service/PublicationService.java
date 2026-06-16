@@ -176,6 +176,13 @@ public class PublicationService {
     }
 
     @Transactional(readOnly = true)
+    public List<PublicationDTO> getMySavedPublications(Long userId) {
+        return saveRepo.findByUtilisateurIdWithPublication(userId).stream()
+                .map(s -> toDTO(s.getPublication(), userId))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
     public Page<PublicationDTO> getMyPosts(Long userId, int page, int size) {
         PageRequest pageable = PageRequest.of(page, size);
         return pubRepo.findByUtilisateurIdOrderByDateDesc(userId, pageable)

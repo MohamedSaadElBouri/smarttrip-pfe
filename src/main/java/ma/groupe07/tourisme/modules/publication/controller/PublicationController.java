@@ -38,6 +38,12 @@ public class PublicationController {
                 .body(ApiResponse.success("Post submitted for review", pubService.create(req, userId)));
     }
 
+    @GetMapping("/me/saved")
+    public ResponseEntity<ApiResponse<List<PublicationDTO>>> getMySavedPublications(Authentication auth) {
+        Long userId = (Long) auth.getCredentials();
+        return ResponseEntity.ok(ApiResponse.success(pubService.getMySavedPublications(userId)));
+    }
+
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<PageResponse<PublicationDTO>>> getMyPosts(
             @RequestParam(defaultValue = "0") int page,
