@@ -348,10 +348,19 @@ public class AiRecommendationService {
      * toute nouvelle reaction influence a la fois les circuits suggeres et
      * l'ordre du feed.
      */
+    /**
+     * Retourne le score d'engagement TOTAL (somme, pas moyenne) par categorie.
+     * Utiliser la somme plutot que la moyenne garantit qu'une categorie avec
+     * 5 interactions produit un score plus eleve qu'une categorie avec 1 seule
+     * interaction, meme si chaque interaction vaut 75 points. Tous les
+     * consommateurs de cette methode (boost feed, interestMatch) normalisent
+     * par le max, donc l'echelle absolue n'a pas d'importance.
+     */
     public Map<String, Double> getCategoryEngagementScores(Long userId) {
         if (userId == null) return Map.of();
         return computeEngagementSignals(userId).scoresByCategory().entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> average(e.getValue())));
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                        e -> e.getValue().stream().mapToDouble(Double::doubleValue).sum()));
     }
 
     private record EngagementSignals(Map<String, List<Double>> scoresByCategory,
