@@ -9,6 +9,8 @@ public interface CommentaireRepository extends JpaRepository<Commentaire, Long> 
     List<Commentaire> findByPublicationIdOrderByDateAsc(Long publicationId);
     long countByPublicationId(Long publicationId);
 
+    long countByUtilisateurId(Long userId);
+
     @Query("SELECT c FROM Commentaire c JOIN FETCH c.publication WHERE c.utilisateur.id = :userId")
     List<Commentaire> findByUtilisateurIdWithPublication(Long userId);
 }

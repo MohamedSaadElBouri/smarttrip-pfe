@@ -13,6 +13,8 @@ public interface LikePublicationRepository extends JpaRepository<LikePublication
     @Query("SELECT COUNT(l) FROM LikePublication l WHERE l.publication.utilisateur.id = :userId")
     Long countLikesForUserPosts(Long userId);
 
+    long countByUtilisateurId(Long userId);
+
     @Query("SELECT l FROM LikePublication l JOIN FETCH l.publication WHERE l.utilisateur.id = :userId")
     List<LikePublication> findByUtilisateurIdWithPublication(Long userId);
 }

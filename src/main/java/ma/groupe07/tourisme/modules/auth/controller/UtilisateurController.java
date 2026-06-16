@@ -7,6 +7,8 @@ import ma.groupe07.tourisme.modules.auth.dto.UpdatePreferencesRequest;
 import ma.groupe07.tourisme.modules.auth.dto.UserSummaryDTO;
 import ma.groupe07.tourisme.modules.auth.model.Utilisateur;
 import ma.groupe07.tourisme.modules.auth.repository.UtilisateurRepository;
+import ma.groupe07.tourisme.modules.circuit.repository.AdhesionCircuitRepository;
+import ma.groupe07.tourisme.modules.publication.repository.CommentaireRepository;
 import ma.groupe07.tourisme.modules.publication.repository.LikePublicationRepository;
 import ma.groupe07.tourisme.modules.publication.repository.PublicationRepository;
 import ma.groupe07.tourisme.modules.publication.repository.SauvegardePublicationRepository;
@@ -14,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestController
@@ -25,21 +28,27 @@ public class UtilisateurController {
     private final PublicationRepository pubRepo;
     private final SauvegardePublicationRepository saveRepo;
     private final LikePublicationRepository likeRepo;
+    private final CommentaireRepository commentaireRepo;
+    private final AdhesionCircuitRepository adhesionCircuitRepo;
 
     @GetMapping("/me/stats")
     public ResponseEntity<ApiResponse<Map<String, Long>>> getMyStats(Authentication auth) {
         Long userId = (Long) auth.getCredentials();
 
-        long postsCount = pubRepo.countByUtilisateurId(userId);
-        long savedCount = saveRepo.countByUtilisateurId(userId);
-        Long likesReceived = likeRepo.countLikesForUserPosts(userId);
-        if (likesReceived == null) likesReceived = 0L;
+        long postsCount        = pubRepo.countByUtilisateurId(userId);
+        long savedCount        = saveRepo.countByUtilisateurId(userId);
+        long likesGivenCount   = likeRepo.countByUtilisateurId(userId);
+        long commentsCount     = commentaireRepo.countByUtilisateurId(userId);
+        long savedCircuitsCount = adhesionCircuitRepo.countByUtilisateurId(userId);
 
-        return ResponseEntity.ok(ApiResponse.success(Map.of(
-                "postsCount", postsCount,
-                "savedCount", savedCount,
-                "likesReceived", likesReceived
-        )));
+        Map<String, Long> stats = new LinkedHashMap<>();
+        stats.put("postsCount", postsCount);
+        stats.put("likesGivenCount", likesGivenCount);
+        stats.put("commentsCount", commentsCount);
+        stats.put("savedCount", savedCount);
+        stats.put("savedCircuitsCount", savedCircuitsCount);
+
+        return ResponseEntity.ok(ApiResponse.success(stats));
     }
 
     @PutMapping("/me/update")
