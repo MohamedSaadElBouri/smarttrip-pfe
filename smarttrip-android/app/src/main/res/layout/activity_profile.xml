@@ -42,16 +42,37 @@
                     android:paddingBottom="24dp"
                     android:background="@color/surface">
 
-                    <ImageView
-                        android:id="@+id/ivProfileAvatar"
+                    <FrameLayout
                         android:layout_width="96dp"
                         android:layout_height="96dp"
-                        android:layout_marginTop="24dp"
-                        android:padding="20dp"
-                        android:background="@drawable/circle_profile_avatar_bg"
-                        android:scaleType="centerInside"
-                        android:src="@android:drawable/ic_menu_myplaces"
-                        app:tint="@color/primary" />
+                        android:layout_marginTop="24dp">
+
+                        <ImageView
+                            android:id="@+id/ivProfileAvatar"
+                            android:layout_width="96dp"
+                            android:layout_height="96dp"
+                            android:padding="20dp"
+                            android:background="@drawable/circle_profile_avatar_bg"
+                            android:scaleType="centerInside"
+                            android:src="@android:drawable/ic_menu_myplaces"
+                            android:clickable="true"
+                            android:focusable="true"
+                            app:tint="@color/primary" />
+
+                        <ImageView
+                            android:id="@+id/ivEditAvatarBadge"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:layout_gravity="bottom|end"
+                            android:padding="5dp"
+                            android:background="@drawable/circle_profile_avatar_bg"
+                            android:backgroundTint="@color/primary"
+                            android:src="@android:drawable/ic_menu_camera"
+                            android:clickable="true"
+                            android:focusable="true"
+                            app:tint="@color/on_primary" />
+
+                    </FrameLayout>
 
                     <TextView
                         android:id="@+id/tvProfileName"

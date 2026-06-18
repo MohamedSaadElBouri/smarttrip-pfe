@@ -13,6 +13,13 @@ public interface ApiService {
     @POST("auth/login")
     Call<com.example.smarttripvoyager.data.model.ApiResponse<com.example.smarttripvoyager.data.model.AuthResponse>> login(@Body LoginRequest request);
 
+    @POST("auth/register")
+    Call<com.example.smarttripvoyager.data.model.ApiResponse<com.example.smarttripvoyager.data.model.AuthResponse>> register(@Body com.example.smarttripvoyager.data.model.RegisterRequest request);
+
+    @retrofit2.http.Multipart
+    @POST("files/upload")
+    Call<com.example.smarttripvoyager.data.model.ApiResponse<java.util.Map<String, String>>> uploadFile(@retrofit2.http.Part okhttp3.MultipartBody.Part file);
+
     @retrofit2.http.GET("auth/me")
     Call<com.example.smarttripvoyager.data.model.ApiResponse<com.example.smarttripvoyager.data.model.AuthResponse>> getMe();
 

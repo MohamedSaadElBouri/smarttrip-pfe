@@ -104,7 +104,6 @@ public class QuestionnaireActivity extends AppCompatActivity {
         setOptions(spinnerGender, new Option[]{
                 new Option("Homme", "male"),
                 new Option("Femme", "female"),
-                new Option("Autre", "other"),
         });
 
         ArrayAdapter<String> yesNoAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, new String[]{"Non", "Oui"});

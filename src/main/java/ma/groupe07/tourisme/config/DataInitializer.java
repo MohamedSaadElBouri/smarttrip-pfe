@@ -27,6 +27,9 @@ import java.util.List;
 @Slf4j
 public class DataInitializer implements ApplicationRunner {
 
+    private static final String MORE_PUBLICATIONS_MARKER =
+            "Atelier de calligraphie arabe organisé dans un riad de la médina, une initiation fascinante à cet art ancestral.";
+
     private final UtilisateurRepository userRepo;
     private final LieuRepository lieuRepo;
     private final CircuitRepository circuitRepo;
@@ -44,6 +47,24 @@ public class DataInitializer implements ApplicationRunner {
         if (evenementRepo.count() == 0) seedEvenements();
         if (questionRepo.count() == 0) seedQuestions();
         if (pubRepo.count() == 0) seedPublications();
+        if (!pubRepo.existsByContenu(MORE_PUBLICATIONS_MARKER)) seedMorePublications();
+        backfillSeedUserPhotos();
+    }
+
+    /** Donne une photo de profil aux comptes de demonstration s'ils n'en ont pas encore (evite l'avatar par defaut identique pour tous). */
+    private void backfillSeedUserPhotos() {
+        userRepo.findByEmail("admin@smarttrip.ma").ifPresent(u -> {
+            if (u.getPhotoUrl() == null || u.getPhotoUrl().isEmpty()) {
+                u.setPhotoUrl("https://i.pravatar.cc/300?img=13");
+                userRepo.save(u);
+            }
+        });
+        userRepo.findByEmail("tourist@smarttrip.ma").ifPresent(u -> {
+            if (u.getPhotoUrl() == null || u.getPhotoUrl().isEmpty()) {
+                u.setPhotoUrl("https://i.pravatar.cc/300?img=51");
+                userRepo.save(u);
+            }
+        });
     }
 
     private void seedUsers() {
@@ -537,6 +558,63 @@ public class DataInitializer implements ApplicationRunner {
                     .build());
         }
         log.info("✅ 40 publications seeded");
+    }
+
+    /** 20 publications supplementaires, memes 10 categories, themes festival/restaurant/spiritualite/luxe/famille/decouverte locale inclus. */
+    private void seedMorePublications() {
+        List<Lieu> lieux = lieuRepo.findAll();
+        List<Utilisateur> users = userRepo.findAll();
+
+        String[][] data = {
+            {"culture", MORE_PUBLICATIONS_MARKER, "morocco,calligraphy,art", "Fès", "", "23"},
+            {"culture", "Visite guidée du Mellah de Fès, l'ancien quartier juif : ses balcons en bois sculpté racontent une autre page de l'histoire de la ville.", "morocco,mellah,jewish", "Fès", "Mellah de Fès", "16"},
+
+            {"nature", "Pique-nique en famille au bord du Lac Dayet Aoua, les enfants ont adoré observer les oiseaux migrateurs.", "morocco,lake,family", "Ifrane", "Lac Dayet Aoua", "34"},
+            {"nature", "Lever de soleil sur la forêt de cèdres d'Azrou, le silence et la brume matinale donnent une ambiance presque irréelle.", "morocco,cedar,sunrise", "Azrou", "Forêt de Cèdres d'Azrou", "29"},
+
+            {"food", "Dégustation de pastilla au pigeon et de cornes de gazelle dans une petite échoppe locale, une explosion de saveurs authentiques.", "morocco,pastilla,dessert", "Fès", "", "39"},
+            {"food", "Soirée gastronomique au Restaurant Dar Hatim avec spectacle de musique andalouse, un dîner inoubliable en famille.", "morocco,gastronomy,music", "Fès", "Restaurant Dar Hatim", "27"},
+
+            {"adventure", "Sortie en famille pour une randonnée douce dans le Moyen Atlas, parfait pour initier les enfants à la marche en pleine nature.", "morocco,family,hiking", "Meknès", "Randonnée Moyen Atlas", "22"},
+            {"adventure", "Excursion à VTT autour d'Ifrane, entre forêts et clairières, une belle dose d'adrénaline pour les amateurs de sensations.", "morocco,mountainbike,ifrane", "Ifrane", "", "18"},
+
+            {"history", "Moment de recueillement à la mosquée Al-Qarawiyyin, plus ancienne université du monde fondée en 859, une expérience spirituelle forte.", "morocco,mosque,spiritual", "Fès", "Mosquée Al-Qarawiyyin", "31"},
+            {"history", "Exploration du Grenier Royal Heri Souani à Meknès, impressionnant par l'ampleur de son architecture du XVIIe siècle.", "morocco,granary,history", "Meknès", "Grenier Royal Heri Souani", "14"},
+
+            {"wellness", "Nuit de luxe au Riad Fès : suite raffinée, patio fleuri et petit-déjeuner servi sur la terrasse avec vue sur la médina.", "morocco,luxury,riad", "Fès", "Riad Fès", "45"},
+            {"wellness", "Séjour à l'Hôtel Sahrai, le service est impeccable et la piscine à débordement offre une vue à couper le souffle sur Fès.", "morocco,hotel,pool", "Fès", "Hôtel Sahrai", "33"},
+
+            {"shopping", "Petite découverte locale : un atelier de poterie familial transmis depuis quatre générations, niché dans une ruelle discrète de la médina.", "morocco,pottery,craft", "Fès", "", "20"},
+            {"shopping", "Trouvé de magnifiques lanternes en fer forgé au marché de Meknès, parfaites pour ramener un souvenir authentique.", "morocco,lantern,market", "Meknès", "Place El Hedim", "17"},
+
+            {"festivals", "Soirée d'ouverture du Festival de Fès des Musiques Sacrées du Monde, une programmation éblouissante réunissant des artistes du monde entier.", "morocco,festival,event", "Fès", "", "50"},
+            {"festivals", "Nuit des Musées à Meknès : entrée gratuite, animations et spectacles dans toute la ville jusqu'à une heure avancée.", "morocco,museum,night", "Meknès", "", "26"},
+
+            {"restaurants", "Brunch dominical au Café Clock, ambiance décontractée et plats marocains réinventés, un classique incontournable à Fès.", "morocco,brunch,cafe", "Fès", "Café Clock Fès", "24"},
+            {"restaurants", "Dîner romantique au Restaurant Collier de la Colombe à Meknès, vue sur la vallée au coucher du soleil, un cadre idéal.", "morocco,restaurant,sunset", "Meknès", "Restaurant Collier de la Colombe", "19"},
+
+            {"monuments", "Admiration sans fin devant Bab Mansour illuminée la nuit, ses mosaïques scintillent sous les projecteurs.", "morocco,monument,night", "Meknès", "Bab Mansour", "28"},
+            {"monuments", "Visite du Borj Nord, ses remparts du XVIe siècle offrent un panorama exceptionnel sur toute la médina de Fès.", "morocco,fortress,panorama", "Fès", "Borj Nord", "21"},
+        };
+
+        for (int i = 0; i < data.length; i++) {
+            String[] row = data[i];
+            Lieu lieu = row[4].isEmpty() ? null
+                    : lieux.stream().filter(l -> l.getNom().equals(row[4])).findFirst().orElse(null);
+            Utilisateur author = users.get(i % users.size());
+
+            pubRepo.save(Publication.builder()
+                    .contenu(row[1])
+                    .photoUrl("https://loremflickr.com/640/480/" + row[2] + "?lock=" + (341 + i))
+                    .region(row[3])
+                    .categorie(row[0])
+                    .statut("APPROUVE")
+                    .nbLikes(Integer.parseInt(row[5]))
+                    .utilisateur(author)
+                    .lieu(lieu)
+                    .build());
+        }
+        log.info("✅ 20 publications supplementaires seeded");
     }
 
     private QuestionFormulaire q(String fr, String ar, String en, String type,

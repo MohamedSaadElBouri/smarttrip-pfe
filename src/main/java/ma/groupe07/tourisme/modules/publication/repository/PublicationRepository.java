@@ -11,4 +11,5 @@ public interface PublicationRepository extends JpaRepository<Publication, Long> 
     long countByStatut(String statut);
     long countByUtilisateurId(Long utilisateurId);
     Page<Publication> findByUtilisateurIdOrderByDateDesc(Long utilisateurId, Pageable pageable);
+    boolean existsByContenu(String contenu);
 }

@@ -1,13 +1,17 @@
 package com.example.smarttripvoyager.ui.profile;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
@@ -47,6 +51,12 @@ public class ProfileActivity extends AppCompatActivity {
     private TextView tvSavedPostsEmpty, tvSavedCircuitsEmpty;
     private MaterialButton btnSettings, btnLogout;
     private SwipeRefreshLayout swipeRefresh;
+    private ImageView ivProfileAvatar, ivEditAvatarBadge;
+
+    private final ActivityResultLauncher<String> pickAvatarLauncher =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
+                if (uri != null) uploadAvatar(uri);
+            });
 
     private RecyclerView recyclerViewMyPosts;
     private RecyclerView recyclerViewSavedPosts;
@@ -82,6 +92,12 @@ public class ProfileActivity extends AppCompatActivity {
         btnSettings           = findViewById(R.id.btnSettings);
         btnLogout             = findViewById(R.id.btnLogout);
         swipeRefresh          = findViewById(R.id.swipeRefresh);
+        ivProfileAvatar       = findViewById(R.id.ivProfileAvatar);
+        ivEditAvatarBadge     = findViewById(R.id.ivEditAvatarBadge);
+
+        View.OnClickListener pickAvatar = v -> pickAvatarLauncher.launch("image/*");
+        ivProfileAvatar.setOnClickListener(pickAvatar);
+        ivEditAvatarBadge.setOnClickListener(pickAvatar);
 
         // My posts
         recyclerViewMyPosts = findViewById(R.id.recyclerViewMyPosts);
@@ -194,6 +210,7 @@ public class ProfileActivity extends AppCompatActivity {
                             location.append(user.preferences);
                         }
                         tvProfileLocation.setText(location.toString());
+                        displayAvatar(user.photoUrl);
 
                         loadStats();
                         return;
@@ -241,6 +258,81 @@ public class ProfileActivity extends AppCompatActivity {
 
     private void setStat(TextView tv, long value) {
         if (tv != null) tv.setText(String.valueOf(value));
+    }
+
+    private void displayAvatar(String photoUrl) {
+        if (photoUrl != null && !photoUrl.isEmpty()) {
+            ivProfileAvatar.setPadding(0, 0, 0, 0);
+            ivProfileAvatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+            Glide.with(this).load(photoUrl).circleCrop().into(ivProfileAvatar);
+        } else {
+            ivProfileAvatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
+            int pad = (int) (20 * getResources().getDisplayMetrics().density);
+            ivProfileAvatar.setPadding(pad, pad, pad, pad);
+            ivProfileAvatar.setImageResource(android.R.drawable.ic_menu_myplaces);
+        }
+    }
+
+    private void uploadAvatar(Uri uri) {
+        byte[] bytes;
+        String mimeType;
+        try {
+            mimeType = getContentResolver().getType(uri);
+            if (mimeType == null) mimeType = "image/jpeg";
+            try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in == null) throw new java.io.IOException("Impossible d'ouvrir l'image");
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+                bytes = out.toByteArray();
+            }
+        } catch (java.io.IOException e) {
+            Toast.makeText(this, "Impossible de lire l'image sélectionnée", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        Toast.makeText(this, "Mise à jour de la photo de profil...", Toast.LENGTH_SHORT).show();
+
+        okhttp3.RequestBody requestBody = okhttp3.RequestBody.create(bytes, okhttp3.MediaType.parse(mimeType));
+        okhttp3.MultipartBody.Part filePart = okhttp3.MultipartBody.Part.createFormData("file", "avatar.jpg", requestBody);
+
+        RetrofitClient.getApiService(this).uploadFile(filePart)
+            .enqueue(new Callback<ApiResponse<Map<String, String>>>() {
+                @Override
+                public void onResponse(Call<ApiResponse<Map<String, String>>> call,
+                                       Response<ApiResponse<Map<String, String>>> response) {
+                    if (response.isSuccessful() && response.body() != null && response.body().data != null) {
+                        String url = response.body().data.get("url");
+                        saveAvatarUrl(url);
+                    } else {
+                        Toast.makeText(ProfileActivity.this, "Erreur lors de l'envoi de l'image", Toast.LENGTH_LONG).show();
+                    }
+                }
+                @Override
+                public void onFailure(Call<ApiResponse<Map<String, String>>> call, Throwable t) {
+                    Toast.makeText(ProfileActivity.this, "Erreur réseau : " + t.getMessage(), Toast.LENGTH_LONG).show();
+                }
+            });
+    }
+
+    private void saveAvatarUrl(String url) {
+        java.util.Map<String, String> body = new java.util.HashMap<>();
+        body.put("photoUrl", url);
+        RetrofitClient.getApiService(this).updateMe(body)
+            .enqueue(new Callback<ApiResponse<UserDto>>() {
+                @Override
+                public void onResponse(Call<ApiResponse<UserDto>> call, Response<ApiResponse<UserDto>> response) {
+                    if (response.isSuccessful() && response.body() != null && response.body().data != null) {
+                        displayAvatar(response.body().data.photoUrl);
+                        Toast.makeText(ProfileActivity.this, "Photo de profil mise à jour", Toast.LENGTH_SHORT).show();
+                    }
+                }
+                @Override
+                public void onFailure(Call<ApiResponse<UserDto>> call, Throwable t) {
+                    Toast.makeText(ProfileActivity.this, "Erreur réseau : " + t.getMessage(), Toast.LENGTH_LONG).show();
+                }
+            });
     }
 
     private void loadMyPosts() {

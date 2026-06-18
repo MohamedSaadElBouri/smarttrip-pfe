@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 public class TokenManager {
     private static final String PREF_NAME = "SmartTripPrefs";
     private static final String KEY_TOKEN = "jwt_token";
+    private static final String KEY_USER_ID = "user_id";
     private SharedPreferences prefs;
 
     public TokenManager(Context context) {
@@ -20,7 +21,15 @@ public class TokenManager {
         return prefs.getString(KEY_TOKEN, null);
     }
 
+    public void saveUserId(long userId) {
+        prefs.edit().putLong(KEY_USER_ID, userId).apply();
+    }
+
+    public long getUserId() {
+        return prefs.getLong(KEY_USER_ID, -1L);
+    }
+
     public void clearToken() {
-        prefs.edit().remove(KEY_TOKEN).apply();
+        prefs.edit().remove(KEY_TOKEN).remove(KEY_USER_ID).apply();
     }
 }

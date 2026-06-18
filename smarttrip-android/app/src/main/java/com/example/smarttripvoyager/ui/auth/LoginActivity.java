@@ -56,7 +56,10 @@ public class LoginActivity extends AppCompatActivity {
                             String token = response.body().data.token;
                             com.example.smarttripvoyager.network.TokenManager tokenManager = new com.example.smarttripvoyager.network.TokenManager(LoginActivity.this);
                             tokenManager.saveToken(token);
-                            
+                            if (response.body().data.id != null) {
+                                tokenManager.saveUserId(response.body().data.id);
+                            }
+
                             Toast.makeText(LoginActivity.this, "Connexion réussie !", Toast.LENGTH_SHORT).show();
                             startActivity(new Intent(LoginActivity.this, com.example.smarttripvoyager.ui.home.HomeActivity.class));
                             finish();

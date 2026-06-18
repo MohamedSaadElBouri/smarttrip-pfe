@@ -80,8 +80,14 @@ public class SetupActivity extends AppCompatActivity {
         UpdatePreferencesRequest request = new UpdatePreferencesRequest(prefJson.toString(), geo, langue);
 
         ApiService apiService = RetrofitClient.getApiService(this);
-        // Supposons que l'ID utilisateur est 1 pour l'instant (à récupérer via TokenManager dans une vraie app)
-        Long userId = 1L; 
+        long storedId = new com.example.smarttripvoyager.network.TokenManager(this).getUserId();
+        if (storedId <= 0) {
+            Toast.makeText(this, "Session invalide, veuillez vous reconnecter", Toast.LENGTH_LONG).show();
+            startActivity(new Intent(this, LoginActivity.class));
+            finish();
+            return;
+        }
+        Long userId = storedId;
 
         apiService.updatePreferences(userId, request).enqueue(new Callback<Void>() {
             @Override

@@ -67,12 +67,13 @@
 
                 <!-- Preview label overlay -->
                 <TextView
+                    android:id="@+id/tvImageHint"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="bottom|end"
                     android:layout_margin="12dp"
                     android:background="#CC000000"
-                    android:text="Aperçu automatique"
+                    android:text="Toucher pour choisir une image"
                     android:textColor="#FFFFFF"
                     android:textSize="11sp"
                     android:paddingHorizontal="8dp"
@@ -83,7 +84,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="L'image est générée automatiquement selon la catégorie"
+                android:text="Choisissez une photo depuis votre galerie"
                 android:textColor="@color/charcoal"
                 android:textSize="11sp"
                 android:layout_marginTop="4dp"
