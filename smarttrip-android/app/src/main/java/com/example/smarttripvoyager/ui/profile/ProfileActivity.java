@@ -205,9 +205,10 @@ public class ProfileActivity extends AppCompatActivity {
                             if (location.length() > 0) location.append(", ");
                             location.append(user.pays);
                         }
-                        if (user.preferences != null && !user.preferences.isEmpty()) {
+                        String prefLabel = formatPreferences(user.preferences);
+                        if (prefLabel != null && !prefLabel.isEmpty()) {
                             if (location.length() > 0) location.append(" • ");
-                            location.append(user.preferences);
+                            location.append(prefLabel);
                         }
                         tvProfileLocation.setText(location.toString());
                         displayAvatar(user.photoUrl);
@@ -258,6 +259,23 @@ public class ProfileActivity extends AppCompatActivity {
 
     private void setStat(TextView tv, long value) {
         if (tv != null) tv.setText(String.valueOf(value));
+    }
+
+    /** Transforme le JSON brut de preferences (issu du questionnaire) en texte lisible. */
+    private String formatPreferences(String preferences) {
+        if (preferences == null || preferences.isEmpty()) return null;
+        String trimmed = preferences.trim();
+        if (!trimmed.startsWith("{")) return preferences;
+        try {
+            org.json.JSONObject json = new org.json.JSONObject(trimmed);
+            java.util.List<String> parts = new java.util.ArrayList<>();
+            if (json.has("travel_style")) parts.add(json.getString("travel_style"));
+            if (json.has("budget_level")) parts.add(json.getString("budget_level").replace("_", " "));
+            if (json.has("age_group")) parts.add(json.getString("age_group"));
+            return String.join(" • ", parts);
+        } catch (org.json.JSONException e) {
+            return null;
+        }
     }
 
     private void displayAvatar(String photoUrl) {
