@@ -51,8 +51,8 @@ public class CreatePostActivity extends AppCompatActivity {
             registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
                 if (uri != null) {
                     selectedImageUri = uri;
+                    ivPostPreview.setImageTintList(null);
                     Glide.with(this).load(uri).centerCrop().into(ivPostPreview);
-                    ivPostPreview.clearColorFilter();
                     tvImageHint.setText("Toucher pour changer l'image");
                 }
             });

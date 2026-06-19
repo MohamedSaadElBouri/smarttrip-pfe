@@ -262,10 +262,13 @@ public class ProfileActivity extends AppCompatActivity {
 
     private void displayAvatar(String photoUrl) {
         if (photoUrl != null && !photoUrl.isEmpty()) {
+            ivProfileAvatar.setImageTintList(null);
             ivProfileAvatar.setPadding(0, 0, 0, 0);
             ivProfileAvatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
             Glide.with(this).load(photoUrl).circleCrop().into(ivProfileAvatar);
         } else {
+            ivProfileAvatar.setImageTintList(android.content.res.ColorStateList.valueOf(
+                    getResources().getColor(R.color.primary, getTheme())));
             ivProfileAvatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
             int pad = (int) (20 * getResources().getDisplayMetrics().density);
             ivProfileAvatar.setPadding(pad, pad, pad, pad);
