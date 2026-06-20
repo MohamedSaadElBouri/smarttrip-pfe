@@ -145,7 +145,7 @@ public class PostAdapter extends RecyclerView.Adapter<PostAdapter.PostViewHolder
             int removedPosition = RecyclerView.NO_POSITION;
 
             if (removeFromThisList) {
-                removedPosition = holder.getBindingAdapterPosition();
+                removedPosition = holder.getAdapterPosition();
                 if (removedPosition != RecyclerView.NO_POSITION) {
                     publications.remove(removedPosition);
                     notifyItemRemoved(removedPosition);

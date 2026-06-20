@@ -113,6 +113,7 @@ public class ProfileActivity extends AppCompatActivity {
         savedPostsAdapter.setOnPublicationRemovedListener(remainingCount -> {
             tvSavedPostsEmpty.setVisibility(remainingCount == 0 ? View.VISIBLE : View.GONE);
             recyclerViewSavedPosts.setVisibility(remainingCount == 0 ? View.GONE : View.VISIBLE);
+            setStat(tvSavedCount, remainingCount);
         });
         recyclerViewSavedPosts.setAdapter(savedPostsAdapter);
 
