@@ -22,12 +22,15 @@ import ma.groupe07.tourisme.modules.publication.model.Publication;
 import ma.groupe07.tourisme.modules.publication.model.SauvegardePublication;
 import ma.groupe07.tourisme.modules.publication.repository.CommentaireRepository;
 import ma.groupe07.tourisme.modules.publication.repository.LikePublicationRepository;
+import ma.groupe07.tourisme.modules.publication.repository.PublicationRepository;
 import ma.groupe07.tourisme.modules.publication.repository.SauvegardePublicationRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -50,6 +53,7 @@ public class AiRecommendationService {
     private final CommentaireRepository commentaireRepository;
     private final AdhesionCircuitRepository adhesionCircuitRepository;
     private final SignalComportementRepository signalComportementRepository;
+    private final PublicationRepository publicationRepository;
     private final LieuRepository lieuRepository;
     private final UtilisateurRepository utilisateurRepository;
     private final RecommandationIARepository recommandationIARepository;
@@ -418,30 +422,95 @@ public class AiRecommendationService {
      * toute nouvelle reaction influence a la fois les circuits suggeres et
      * l'ordre du feed.
      */
-    /**
-     * Retourne le score d'engagement TOTAL (somme, pas moyenne) par categorie.
-     * Utiliser la somme plutot que la moyenne garantit qu'une categorie avec
-     * 5 interactions produit un score plus eleve qu'une categorie avec 1 seule
-     * interaction, meme si chaque interaction vaut 75 points. Tous les
-     * consommateurs de cette methode (boost feed, interestMatch) normalisent
-     * par le max, donc l'echelle absolue n'a pas d'importance.
-     */
-    public Map<String, Double> getCategoryEngagementScores(Long userId) {
-        if (userId == null) return Map.of();
-        return computeEngagementSignals(userId).scoresByCategory().entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey,
-                        e -> e.getValue().stream().mapToDouble(Double::doubleValue).sum()));
+    /** Demi-vie (en heures) de la ponderation par recence du score de feed : un signal
+     *  perd la moitie de son poids toutes les {@code FEED_SIGNAL_HALF_LIFE_HOURS} heures,
+     *  afin qu'un gros historique d'engagement ancien ne masque plus indefiniment des
+     *  reactions recentes (likes/dislikes) sur d'autres categories. */
+    private static final double FEED_SIGNAL_HALF_LIFE_HOURS = 12.0;
+
+    private record FeedSignal(String category, double score, LocalDateTime date) {
     }
 
     /**
-     * Nombre total de signaux d'engagement (likes, sauvegardes, commentaires,
+     * Retourne le score d'engagement NET (signe, pondere par recence) par categorie,
+     * utilise uniquement par le classement du fil d'actualite (PublicationService).
+     * Contrairement a {@link #computeEngagementSignals} (utilise par les recommandations
+     * de circuits, score cumulatif non pondere), cette methode :
+     * - inclut les "dislikes" (retrait d'un like) comme signal NEGATIF explicite ;
+     * - applique une decroissance exponentielle par anciennete de chaque signal, pour
+     *   que de nouvelles reactions fassent bouger le classement rapidement, meme face
+     *   a un gros historique d'interactions plus anciennes.
+     */
+    public Map<String, Double> getCategoryEngagementScores(Long userId) {
+        if (userId == null) return Map.of();
+        LocalDateTime now = LocalDateTime.now();
+        Map<String, Double> scores = new HashMap<>();
+        for (FeedSignal signal : collectFeedSignals(userId)) {
+            if (signal.date() == null) continue;
+            double ageHours = Duration.between(signal.date(), now).toSeconds() / 3600.0;
+            double decay = Math.pow(0.5, Math.max(0, ageHours) / FEED_SIGNAL_HALF_LIFE_HOURS);
+            scores.merge(signal.category(), signal.score() * decay, Double::sum);
+        }
+        return scores;
+    }
+
+    /**
+     * Nombre total de signaux d'engagement (likes, dislikes, sauvegardes, commentaires,
      * adhesions, vues) de l'utilisateur. Utilise par PublicationService pour
      * declencher un classement de feed plus reactif une fois un minimum
      * d'interactions atteint.
      */
     public int getEngagementSignalCount(Long userId) {
         if (userId == null) return 0;
-        return computeEngagementSignals(userId).allScores().size();
+        return collectFeedSignals(userId).size();
+    }
+
+    /** Recueille, avec leur date, tous les signaux (positifs et negatifs) utilises pour le score de feed. */
+    private List<FeedSignal> collectFeedSignals(Long userId) {
+        List<FeedSignal> signals = new ArrayList<>();
+
+        for (LikePublication like : likePublicationRepository.findByUtilisateurIdWithPublication(userId)) {
+            Publication pub = like.getPublication();
+            if (pub == null || pub.getCategorie() == null || pub.getCategorie().isBlank()) continue;
+            signals.add(new FeedSignal(pub.getCategorie(), 75.0, like.getDate()));
+        }
+        for (SauvegardePublication save : sauvegardePublicationRepository.findByUtilisateurIdWithPublication(userId)) {
+            Publication pub = save.getPublication();
+            if (pub == null || pub.getCategorie() == null || pub.getCategorie().isBlank()) continue;
+            signals.add(new FeedSignal(pub.getCategorie(), 80.0, save.getDateSauvegarde()));
+        }
+        for (Commentaire comment : commentaireRepository.findByUtilisateurIdWithPublication(userId)) {
+            Publication pub = comment.getPublication();
+            if (pub == null || pub.getCategorie() == null || pub.getCategorie().isBlank()) continue;
+            signals.add(new FeedSignal(pub.getCategorie(), 60.0, comment.getDate()));
+        }
+        for (AdhesionCircuit adhesion : adhesionCircuitRepository.findByUtilisateurId(userId)) {
+            Circuit circuit = adhesion.getCircuit();
+            if (circuit == null) continue;
+            String cat = CIRCUIT_THEME_TO_ENGAGEMENT.get(normalizeTheme(circuit.getTheme()));
+            if (cat == null) continue;
+            signals.add(new FeedSignal(cat, 85.0, adhesion.getDateDebut()));
+        }
+        for (SignalComportement signal : signalComportementRepository.findByUtilisateurIdAndEntiteType(userId, "LIEU")) {
+            Lieu lieu = lieuRepository.findById(signal.getEntiteId()).orElse(null);
+            String cat = lieu == null ? null : LIEU_CATEGORY_TO_ENGAGEMENT.get(lieu.getCategorie());
+            if (cat == null) continue;
+            signals.add(new FeedSignal(cat, 40.0, signal.getDate()));
+        }
+        for (SignalComportement signal : signalComportementRepository.findByUtilisateurIdAndEntiteType(userId, "CIRCUIT")) {
+            Circuit circuit = circuitRepository.findById(signal.getEntiteId()).orElse(null);
+            String cat = circuit == null ? null : CIRCUIT_THEME_TO_ENGAGEMENT.get(normalizeTheme(circuit.getTheme()));
+            if (cat == null) continue;
+            signals.add(new FeedSignal(cat, 45.0, signal.getDate()));
+        }
+        // Dislike explicite (retrait d'un like) : signal negatif fort, enregistre par
+        // PublicationService.toggleLike au moment ou l'utilisateur retire son like.
+        for (SignalComportement signal : signalComportementRepository.findByUtilisateurIdAndEntiteType(userId, "PUBLICATION_DISLIKE")) {
+            Publication pub = publicationRepository.findById(signal.getEntiteId()).orElse(null);
+            if (pub == null || pub.getCategorie() == null || pub.getCategorie().isBlank()) continue;
+            signals.add(new FeedSignal(pub.getCategorie(), -75.0, signal.getDate()));
+        }
+        return signals;
     }
 
     private record EngagementSignals(Map<String, List<Double>> scoresByCategory,

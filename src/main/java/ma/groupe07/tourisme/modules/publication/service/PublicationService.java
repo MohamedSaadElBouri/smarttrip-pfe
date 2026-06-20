@@ -4,6 +4,8 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ma.groupe07.tourisme.modules.ai.dto.FeedPostRequest;
+import ma.groupe07.tourisme.modules.ai.model.SignalComportement;
+import ma.groupe07.tourisme.modules.ai.repository.SignalComportementRepository;
 import ma.groupe07.tourisme.modules.ai.service.AiRecommendationService;
 import ma.groupe07.tourisme.modules.auth.model.Utilisateur;
 import ma.groupe07.tourisme.modules.auth.repository.UtilisateurRepository;
@@ -39,6 +41,7 @@ public class PublicationService {
     private final SauvegardePublicationRepository saveRepo;
     private final UtilisateurRepository userRepo;
     private final LieuRepository lieuRepo;
+    private final SignalComportementRepository signalComportementRepo;
     private final AiRecommendationService aiRecommendationService;
 
     @Transactional(readOnly = true)
@@ -84,23 +87,32 @@ public class PublicationService {
 
             // Amplify engagement signal: multiply score by a category engagement boost
             // so that changes in user interactions produce a visible reordering even
-            // when Flask is unavailable. Once the user has reached a minimum number of
-            // interactions (likes/saves/comments/...), the boost spread widens sharply
-            // (0.5x-2.0x) so favourite categories clearly rise and ignored/unliked ones
-            // clearly fall; below that threshold a gentle 1.0x-1.5x boost avoids
-            // reshuffling the feed on a single stray interaction.
+            // when Flask is unavailable. Engagement scores are signed (a "dislike" -
+            // i.e. removing a like - counts as a strong negative signal for that
+            // category, see AiRecommendationService.collectFeedSignals), so categories
+            // the user keeps disliking sink below the neutral 1.0x baseline while
+            // categories they like rise above it. Once the user has reached a minimum
+            // number of total interactions (likes/dislikes/saves/comments/...), the
+            // boost spread widens sharply (0.3x-2.0x); below that threshold a gentler
+            // 0.6x-1.4x spread avoids reshuffling the feed on a single stray interaction.
             if (!engagementByCategory.isEmpty()) {
                 int totalSignals = aiRecommendationService.getEngagementSignalCount(viewerId);
-                double maxEng = engagementByCategory.values().stream().mapToDouble(v -> v).max().orElse(1.0);
+                double maxAbsEng = engagementByCategory.values().stream()
+                        .mapToDouble(Math::abs).max().orElse(0.0);
+                if (maxAbsEng <= 0) maxAbsEng = 1.0;
+                final double maxAbs = maxAbsEng;
                 Map<Long, String> pubCategories = content.stream()
                         .collect(Collectors.toMap(Publication::getId,
                                  p -> p.getCategorie() != null ? p.getCategorie() : ""));
                 boolean reactive = totalSignals >= MIN_INTERACTIONS_FOR_STRONG_RERANK;
+                double spread = reactive ? 1.0 : 0.4;
+                double minBoost = reactive ? 0.3 : 0.6;
+                double maxBoost = reactive ? 2.0 : 1.4;
                 dtos.forEach(dto -> {
                     String cat = pubCategories.getOrDefault(dto.getId(), "");
                     double eng = engagementByCategory.getOrDefault(cat, 0.0);
-                    double ratio = eng / maxEng;
-                    double boost = reactive ? (0.5 + 1.5 * ratio) : (1.0 + 0.5 * ratio);
+                    double ratio = eng / maxAbs;
+                    double boost = Math.max(minBoost, Math.min(maxBoost, 1.0 + spread * ratio));
                     if (dto.getAiRankingScore() != null) {
                         dto.setAiRankingScore(dto.getAiRankingScore() * boost);
                     }
@@ -150,7 +162,10 @@ public class PublicationService {
         if (existingLike.isPresent()) {
             likeRepo.delete(existingLike.get());
             pub.setNbLikes(Math.max(0, pub.getNbLikes() - 1));
-            liked = false; // unliked
+            liked = false; // unliked = signal negatif explicite ("dislike") pour le feed
+            signalComportementRepo.save(SignalComportement.builder()
+                    .typeSignal("DISLIKE").entiteType("PUBLICATION_DISLIKE")
+                    .entiteId(pubId).utilisateur(user).build());
         } else {
             likeRepo.save(LikePublication.builder().publication(pub).utilisateur(user).build());
             pub.setNbLikes(pub.getNbLikes() + 1);
