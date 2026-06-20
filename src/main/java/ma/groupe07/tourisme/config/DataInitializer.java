@@ -30,6 +30,9 @@ public class DataInitializer implements ApplicationRunner {
     private static final String MORE_PUBLICATIONS_MARKER =
             "Atelier de calligraphie arabe organisé dans un riad de la médina, une initiation fascinante à cet art ancestral.";
 
+    private static final String RERANK_TEST_PUBLICATIONS_MARKER =
+            "Encore une matinée passée à explorer la médina de Fès, chaque ruelle réserve une nouvelle surprise architecturale.";
+
     private final UtilisateurRepository userRepo;
     private final LieuRepository lieuRepo;
     private final CircuitRepository circuitRepo;
@@ -48,6 +51,7 @@ public class DataInitializer implements ApplicationRunner {
         if (questionRepo.count() == 0) seedQuestions();
         if (pubRepo.count() == 0) seedPublications();
         if (!pubRepo.existsByContenu(MORE_PUBLICATIONS_MARKER)) seedMorePublications();
+        if (!pubRepo.existsByContenu(RERANK_TEST_PUBLICATIONS_MARKER)) seedRerankTestPublications();
         backfillSeedUserPhotos();
     }
 
@@ -615,6 +619,68 @@ public class DataInitializer implements ApplicationRunner {
                     .build());
         }
         log.info("✅ 20 publications supplementaires seeded");
+    }
+
+    /**
+     * Lot supplementaire pour tester manuellement la reactivite du classement du
+     * feed (boost fort declenche a partir de 4 interactions, voir PublicationService).
+     * Plusieurs entrees par categorie afin qu'aimer 4 publications "culture" (par
+     * exemple) fasse remonter visiblement les autres publications culture du feed.
+     */
+    private void seedRerankTestPublications() {
+        List<Lieu> lieux = lieuRepo.findAll();
+        List<Utilisateur> users = userRepo.findAll();
+
+        String[][] data = {
+            {"culture", RERANK_TEST_PUBLICATIONS_MARKER, "morocco,medina,street", "Fès", "Médina de Fès", "5"},
+            {"culture", "Photo souvenir devant les portes monumentales de Bab Bou Jeloud, bleu et vert éclatants sous le soleil.", "morocco,gate,blue", "Fès", "Bab Bou Jeloud", "8"},
+            {"culture", "Initiation à la poterie de Fès dans un atelier artisanal, repartie avec mon propre bol fait main.", "morocco,pottery,workshop", "Fès", "", "6"},
+            {"culture", "Visite du Musée Nejjarine des Arts du Bois, une collection impressionnante d'objets en bois sculpté.", "morocco,wood,museum", "Fès", "", "4"},
+
+            {"nature", "Balade matinale autour du Lac Dayet Aoua, brume sur l'eau et silence total, un moment suspendu.", "morocco,lake,morning", "Ifrane", "Lac Dayet Aoua", "9"},
+            {"nature", "Pause pique-nique sous les cèdres centenaires d'Azrou, les singes magots ne sont jamais loin.", "morocco,cedar,picnic", "Azrou", "Forêt de Cèdres d'Azrou", "7"},
+            {"nature", "Sentier fleuri dans le Moyen Atlas au printemps, les couleurs sont magnifiques cette saison.", "morocco,atlas,flowers", "Meknès", "", "5"},
+            {"nature", "Petit chalet à Ifrane pour le week-end, le calme de la \"Suisse marocaine\" fait toujours son effet.", "morocco,ifrane,chalet", "Ifrane", "", "10"},
+
+            {"food", "Atelier pâtisserie marocaine : cornes de gazelle et chebakia faites maison, un vrai régal sucré.", "morocco,pastry,sweet", "Fès", "", "11"},
+            {"food", "Thé à la menthe et msemen partagés avec des habitants du quartier, l'hospitalité marocaine en plein cœur.", "morocco,tea,hospitality", "Fès", "", "6"},
+            {"food", "Marché aux épices animé près de Bab Boujloud, les parfums de cumin et safran se mélangent dans l'air.", "morocco,spices,market", "Fès", "", "8"},
+
+            {"adventure", "Tyrolienne au-dessus de la vallée près d'Ifrane, sensations fortes garanties pour les amateurs de hauteur.", "morocco,zipline,valley", "Ifrane", "", "12"},
+            {"adventure", "Escalade improvisée sur les rochers du Moyen Atlas avec un groupe de randonneurs rencontrés sur place.", "morocco,climbing,atlas", "Meknès", "", "7"},
+
+            {"history", "Découverte des vestiges berbères près de Volubilis, un site encore peu visité mais fascinant.", "morocco,ruins,berber", "Meknès", "Volubilis", "9"},
+            {"history", "Visite du Bassin de l'Agdal à Meknès, immense réservoir construit sous Moulay Ismaïl au XVIIe siècle.", "morocco,reservoir,history", "Meknès", "", "6"},
+
+            {"wellness", "Massage aux huiles essentielles d'argan dans un spa traditionnel, parfait après une longue journée de marche.", "morocco,argan,spa", "Fès", "", "10"},
+
+            {"shopping", "Negociation amicale pour un plateau en cuivre gravé à la main au souk de Fès, souvenir parfait.", "morocco,copper,souk", "Fès", "", "8"},
+
+            {"festivals", "Defile de chars fleuris pour le Festival des Roses dans la region, ambiance festive toute la journee.", "morocco,festival,flowers", "Fès", "", "13"},
+
+            {"restaurants", "Diner sous les etoiles dans un riad de la medina, tagine mijote et musique live en fond.", "morocco,riad,dinner", "Fès", "", "15"},
+
+            {"monuments", "Lever du jour sur les remparts de Meknès, lumiere doree sur la pierre ocre.", "morocco,ramparts,dawn", "Meknès", "", "7"},
+        };
+
+        for (int i = 0; i < data.length; i++) {
+            String[] row = data[i];
+            Lieu lieu = row[4].isEmpty() ? null
+                    : lieux.stream().filter(l -> l.getNom().equals(row[4])).findFirst().orElse(null);
+            Utilisateur author = users.get(i % users.size());
+
+            pubRepo.save(Publication.builder()
+                    .contenu(row[1])
+                    .photoUrl("https://loremflickr.com/640/480/" + row[2] + "?lock=" + (401 + i))
+                    .region(row[3])
+                    .categorie(row[0])
+                    .statut("APPROUVE")
+                    .nbLikes(Integer.parseInt(row[5]))
+                    .utilisateur(author)
+                    .lieu(lieu)
+                    .build());
+        }
+        log.info("✅ {} publications de test rerank seeded", data.length);
     }
 
     private QuestionFormulaire q(String fr, String ar, String en, String type,

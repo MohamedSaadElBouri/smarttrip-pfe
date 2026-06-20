@@ -29,6 +29,10 @@ import java.util.stream.Collectors;
 @Slf4j
 public class PublicationService {
 
+    /** Nombre minimum d'interactions (likes/sauvegardes/commentaires/...) avant que le
+     *  classement du feed applique le boost d'engagement fort (0.5x-2.0x). */
+    private static final int MIN_INTERACTIONS_FOR_STRONG_RERANK = 4;
+
     private final PublicationRepository pubRepo;
     private final CommentaireRepository commentRepo;
     private final LikePublicationRepository likeRepo;
@@ -79,17 +83,24 @@ public class PublicationService {
             dtos.forEach(dto -> dto.setAiRankingScore(finalScores.getOrDefault(dto.getId(), 1.0)));
 
             // Amplify engagement signal: multiply score by a category engagement boost
-            // (1.0 to 1.5x) so that changes in user interactions produce a visible reordering
-            // even when Flask is unavailable.
+            // so that changes in user interactions produce a visible reordering even
+            // when Flask is unavailable. Once the user has reached a minimum number of
+            // interactions (likes/saves/comments/...), the boost spread widens sharply
+            // (0.5x-2.0x) so favourite categories clearly rise and ignored/unliked ones
+            // clearly fall; below that threshold a gentle 1.0x-1.5x boost avoids
+            // reshuffling the feed on a single stray interaction.
             if (!engagementByCategory.isEmpty()) {
+                int totalSignals = aiRecommendationService.getEngagementSignalCount(viewerId);
                 double maxEng = engagementByCategory.values().stream().mapToDouble(v -> v).max().orElse(1.0);
                 Map<Long, String> pubCategories = content.stream()
                         .collect(Collectors.toMap(Publication::getId,
                                  p -> p.getCategorie() != null ? p.getCategorie() : ""));
+                boolean reactive = totalSignals >= MIN_INTERACTIONS_FOR_STRONG_RERANK;
                 dtos.forEach(dto -> {
                     String cat = pubCategories.getOrDefault(dto.getId(), "");
                     double eng = engagementByCategory.getOrDefault(cat, 0.0);
-                    double boost = 1.0 + 0.5 * (eng / maxEng);
+                    double ratio = eng / maxEng;
+                    double boost = reactive ? (0.5 + 1.5 * ratio) : (1.0 + 0.5 * ratio);
                     if (dto.getAiRankingScore() != null) {
                         dto.setAiRankingScore(dto.getAiRankingScore() * boost);
                     }

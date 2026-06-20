@@ -109,6 +109,11 @@ public class ProfileActivity extends AppCompatActivity {
         recyclerViewSavedPosts = findViewById(R.id.recyclerViewSavedPosts);
         recyclerViewSavedPosts.setLayoutManager(new LinearLayoutManager(this));
         savedPostsAdapter = new PostAdapter(this, new ArrayList<>());
+        savedPostsAdapter.setRemoveOnUnsave(true);
+        savedPostsAdapter.setOnPublicationRemovedListener(remainingCount -> {
+            tvSavedPostsEmpty.setVisibility(remainingCount == 0 ? View.VISIBLE : View.GONE);
+            recyclerViewSavedPosts.setVisibility(remainingCount == 0 ? View.GONE : View.VISIBLE);
+        });
         recyclerViewSavedPosts.setAdapter(savedPostsAdapter);
 
         // Saved circuits

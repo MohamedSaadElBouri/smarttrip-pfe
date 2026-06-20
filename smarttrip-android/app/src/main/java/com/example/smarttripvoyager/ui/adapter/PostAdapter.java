@@ -21,8 +21,15 @@ import java.util.List;
 
 public class PostAdapter extends RecyclerView.Adapter<PostAdapter.PostViewHolder> {
 
+    /** Notified when an item is removed locally after an unsave (see {@link #setRemoveOnUnsave}). */
+    public interface OnPublicationRemovedListener {
+        void onPublicationRemoved(int remainingCount);
+    }
+
     private List<Publication> publications;
     private Context context;
+    private boolean removeOnUnsave = false;
+    private OnPublicationRemovedListener removalListener;
 
     public PostAdapter(Context context, List<Publication> publications) {
         this.context = context;
@@ -32,6 +39,19 @@ public class PostAdapter extends RecyclerView.Adapter<PostAdapter.PostViewHolder
     public void setPublications(List<Publication> publications) {
         this.publications = publications;
         notifyDataSetChanged();
+    }
+
+    /**
+     * When true, un-saving a publication removes it immediately from this adapter's
+     * list instead of just toggling its bookmark icon. Used for the "saved posts" list
+     * in the profile screen, where an unsaved item should no longer be displayed.
+     */
+    public void setRemoveOnUnsave(boolean removeOnUnsave) {
+        this.removeOnUnsave = removeOnUnsave;
+    }
+
+    public void setOnPublicationRemovedListener(OnPublicationRemovedListener listener) {
+        this.removalListener = listener;
     }
 
     @NonNull
@@ -121,16 +141,49 @@ public class PostAdapter extends RecyclerView.Adapter<PostAdapter.PostViewHolder
         
         holder.btnSave.setOnClickListener(v -> {
             boolean isSaved = pub.isSavedByMe();
-            pub.setSavedByMe(!isSaved);
-            holder.btnSave.setIconTintResource(pub.isSavedByMe() ? R.color.primary : R.color.charcoal);
-            Toast.makeText(context, "Publication " + (pub.isSavedByMe() ? "sauvegardée" : "retirée des sauvegardes"), Toast.LENGTH_SHORT).show();
-            
+            boolean removeFromThisList = isSaved && removeOnUnsave;
+            int removedPosition = RecyclerView.NO_POSITION;
+
+            if (removeFromThisList) {
+                removedPosition = holder.getBindingAdapterPosition();
+                if (removedPosition != RecyclerView.NO_POSITION) {
+                    publications.remove(removedPosition);
+                    notifyItemRemoved(removedPosition);
+                    if (removalListener != null) {
+                        removalListener.onPublicationRemoved(publications.size());
+                    }
+                }
+            } else {
+                pub.setSavedByMe(!isSaved);
+                holder.btnSave.setIconTintResource(pub.isSavedByMe() ? R.color.primary : R.color.charcoal);
+            }
+            Toast.makeText(context, "Publication " + (isSaved ? "retirée des sauvegardes" : "sauvegardée"), Toast.LENGTH_SHORT).show();
+
+            final int rollbackPosition = removedPosition;
             com.example.smarttripvoyager.network.ApiService apiService = com.example.smarttripvoyager.network.RetrofitClient.getApiService(context);
             apiService.toggleSauvegarde(pub.getId()).enqueue(new retrofit2.Callback<com.example.smarttripvoyager.data.model.ApiResponse<java.util.Map<String, Boolean>>>() {
                 @Override
-                public void onResponse(retrofit2.Call<com.example.smarttripvoyager.data.model.ApiResponse<java.util.Map<String, Boolean>>> call, retrofit2.Response<com.example.smarttripvoyager.data.model.ApiResponse<java.util.Map<String, Boolean>>> response) {}
+                public void onResponse(retrofit2.Call<com.example.smarttripvoyager.data.model.ApiResponse<java.util.Map<String, Boolean>>> call, retrofit2.Response<com.example.smarttripvoyager.data.model.ApiResponse<java.util.Map<String, Boolean>>> response) {
+                    if (removeFromThisList && (!response.isSuccessful() || response.body() == null)) {
+                        restoreRemovedItem(rollbackPosition);
+                    }
+                }
                 @Override
-                public void onFailure(retrofit2.Call<com.example.smarttripvoyager.data.model.ApiResponse<java.util.Map<String, Boolean>>> call, Throwable t) {}
+                public void onFailure(retrofit2.Call<com.example.smarttripvoyager.data.model.ApiResponse<java.util.Map<String, Boolean>>> call, Throwable t) {
+                    if (removeFromThisList) {
+                        restoreRemovedItem(rollbackPosition);
+                    }
+                }
+
+                private void restoreRemovedItem(int position) {
+                    if (position == RecyclerView.NO_POSITION) return;
+                    int insertAt = Math.min(position, publications.size());
+                    publications.add(insertAt, pub);
+                    notifyItemInserted(insertAt);
+                    if (removalListener != null) {
+                        removalListener.onPublicationRemoved(publications.size());
+                    }
+                }
             });
         });
         

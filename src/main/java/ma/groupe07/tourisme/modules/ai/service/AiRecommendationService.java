@@ -433,6 +433,17 @@ public class AiRecommendationService {
                         e -> e.getValue().stream().mapToDouble(Double::doubleValue).sum()));
     }
 
+    /**
+     * Nombre total de signaux d'engagement (likes, sauvegardes, commentaires,
+     * adhesions, vues) de l'utilisateur. Utilise par PublicationService pour
+     * declencher un classement de feed plus reactif une fois un minimum
+     * d'interactions atteint.
+     */
+    public int getEngagementSignalCount(Long userId) {
+        if (userId == null) return 0;
+        return computeEngagementSignals(userId).allScores().size();
+    }
+
     private record EngagementSignals(Map<String, List<Double>> scoresByCategory,
                                       Map<String, Long> cityCounts,
                                       List<Double> allScores) {
